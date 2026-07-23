@@ -40,6 +40,11 @@ const nextConfig = {
         protocol: "https",
         hostname: "images.unsplash.com",
       },
+      {
+        // Places API (New) photo media endpoint (skipHttpRedirect=false path)
+        protocol: "https",
+        hostname: "places.googleapis.com",
+      },
     ],
   },
 };

@@ -1,45 +1,48 @@
 /**
  * Server-side only — never import this module from a Client Component.
+ *
+ * Uses the Places API (New): https://places.googleapis.com/v1/
+ *
  * The GOOGLE_PLACES_API_KEY env var is not prefixed with NEXT_PUBLIC_
  * and is therefore never sent to the browser.
  */
 
 import type { GooglePlaceResult } from "./types";
 
-const BASE_URL = "https://maps.googleapis.com/maps/api/place";
+const PLACES_BASE = "https://places.googleapis.com/v1";
 
-// ----------------------------------------------------------------
-// Raw API response shapes (internal — not exported)
-// ----------------------------------------------------------------
-interface RawPhoto {
-  photo_reference: string;
-  height: number;
-  width: number;
-}
+// ── Internal API response shapes ──────────────────────────────────────────────
 
-interface RawPlaceDetails {
-  place_id?: string;
-  formatted_address?: string;
-  formatted_phone_number?: string;
+interface TextSearchPlace {
+  id: string;
+  displayName?: { text: string };
+  formattedAddress?: string;
+  nationalPhoneNumber?: string;
+  internationalPhoneNumber?: string;
   rating?: number;
-  website?: string;
-  photos?: RawPhoto[];
-  opening_hours?: {
-    weekday_text?: string[];
+  websiteUri?: string;
+  regularOpeningHours?: {
+    weekdayDescriptions: string[];
   };
+  photos?: PlacePhoto[];
 }
 
-interface TextSearchResult {
-  place_id: string;
+interface PlacePhoto {
+  name: string;   // full resource path: "places/{id}/photos/{ref}"
+  widthPx: number;
+  heightPx: number;
 }
 
-// ----------------------------------------------------------------
-// In-memory caches — keyed by "placeName::neighbourhood".
-// Survive for the lifetime of the Node.js process (warm deploys,
-// serverless container reuse). A null entry means "already looked up,
-// nothing found" so we don't make redundant API calls.
-// ----------------------------------------------------------------
-const photoCache = new Map<string, string | null>();
+interface PhotoMediaResponse {
+  name:     string;
+  photoUri: string;   // direct CDN URL — lh3.googleusercontent.com
+}
+
+// ── In-memory caches ──────────────────────────────────────────────────────────
+// Keyed by "placeName::neighbourhood".
+// null entries prevent redundant retries within the same process lifetime.
+
+const photoCache   = new Map<string, string | null>();
 const detailsCache = new Map<string, GooglePlaceResult | null>();
 
 function assertServerSide(): void {
@@ -61,92 +64,76 @@ function apiKey(): string {
   return key;
 }
 
-// ----------------------------------------------------------------
-// Internal helpers
-// ----------------------------------------------------------------
-
-/**
- * Text Search → returns the first matching place_id, or null.
- * Results are cached by Next.js data cache for 24 hours.
- */
-async function findPlaceId(
-  placeName: string,
-  neighbourhood: string
-): Promise<string | null> {
-  const query = `${placeName} ${neighbourhood}`;
-  const url = new URL(`${BASE_URL}/textsearch/json`);
-  url.searchParams.set("query", query);
-  url.searchParams.set("key", apiKey());
-  url.searchParams.set("type", "establishment");
-
-  const response = await fetch(url.toString(), {
-    next: { revalidate: 86400 }, // 24-hour Next.js data cache
-  });
-
-  if (!response.ok) return null;
-
-  const data = await response.json();
-  const results: TextSearchResult[] = data.results ?? [];
-
-  return results[0]?.place_id ?? null;
+function placesHeaders(fieldMask: string): HeadersInit {
+  return {
+    "Content-Type":     "application/json",
+    "X-Goog-Api-Key":   apiKey(),
+    "X-Goog-FieldMask": fieldMask,
+  };
 }
 
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
 /**
- * Place Details → returns raw detail fields for a known place_id.
- * Results are cached by Next.js data cache for 24 hours.
+ * Text Search (New) — finds the best matching place.
+ * Cached by Next.js data cache for 24 h.
  */
-async function fetchRawDetails(placeId: string): Promise<RawPlaceDetails | null> {
-  const fields = [
-    "place_id",
-    "formatted_address",
-    "formatted_phone_number",
-    "opening_hours",
-    "rating",
-    "website",
-    "photos",
-  ].join(",");
+async function findPlace(
+  placeName: string,
+  neighbourhood: string
+): Promise<TextSearchPlace | null> {
+  const query = `${placeName} Singapore`;
 
-  const url = new URL(`${BASE_URL}/details/json`);
-  url.searchParams.set("place_id", placeId);
-  url.searchParams.set("fields", fields);
-  url.searchParams.set("key", apiKey());
-
-  const response = await fetch(url.toString(), {
+  const res = await fetch(`${PLACES_BASE}/places:searchText`, {
+    method:  "POST",
+    headers: placesHeaders(
+      "places.id,places.displayName,places.formattedAddress," +
+      "places.internationalPhoneNumber,places.rating,places.websiteUri," +
+      "places.regularOpeningHours,places.photos"
+    ),
+    body: JSON.stringify({ textQuery: query }),
     next: { revalidate: 86400 },
   });
 
-  if (!response.ok) return null;
+  if (!res.ok) return null;
 
-  const data = await response.json();
-  return (data.result as RawPlaceDetails) ?? null;
+  const data = await res.json() as {
+    places?: TextSearchPlace[];
+    error?: { status: string; message: string };
+  };
+
+  if (data.error || !data.places?.length) return null;
+
+  return data.places[0];
 }
 
 /**
- * Builds the Place Photo URL for a given photo_reference.
- * The URL redirects to an image hosted on Google's CDN.
- * Add maps.googleapis.com to next.config.mjs remotePatterns
- * to use with next/image.
+ * Photo Media (New) — resolves a photo resource name to a CDN URL.
+ * skipHttpRedirect=true returns JSON { photoUri } (lh3.googleusercontent.com)
+ * rather than a 302 redirect — gives us a stable URL to store.
  */
-function buildPhotoUrl(photoReference: string, maxWidth = 800): string {
-  return (
-    `${BASE_URL}/photo` +
-    `?maxwidth=${maxWidth}` +
-    `&photo_reference=${encodeURIComponent(photoReference)}` +
-    `&key=${apiKey()}`
-  );
+async function resolvePhotoUrl(photoName: string): Promise<string | null> {
+  const url = new URL(`${PLACES_BASE}/${photoName}/media`);
+  url.searchParams.set("maxWidthPx",       "800");
+  url.searchParams.set("skipHttpRedirect", "true");
+  url.searchParams.set("key",              apiKey());
+
+  const res  = await fetch(url.toString(), { next: { revalidate: 86400 } });
+  if (!res.ok) return null;
+
+  const data = await res.json() as PhotoMediaResponse | { error?: unknown };
+  if ("error" in data || !("photoUri" in data)) return null;
+
+  return (data as PhotoMediaResponse).photoUri;
 }
 
-// ----------------------------------------------------------------
-// Public API
-// ----------------------------------------------------------------
+// ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Returns a photo URL (800 px wide) for the given venue, or null if
- * the venue cannot be found or has no photos.
+ * Returns a photo URL (800 px wide) for the given venue, or null if the
+ * venue cannot be found or has no photos.
  *
- * Results are held in an in-memory cache for the process lifetime and
- * in the Next.js data cache for 24 hours.
- *
+ * Dual-layer caching: in-memory Map + Next.js data cache (24 h).
  * SERVER-SIDE ONLY.
  */
 export async function getVenuePhoto(
@@ -156,46 +143,30 @@ export async function getVenuePhoto(
   assertServerSide();
 
   const key = buildCacheKey(placeName, neighbourhood);
-
-  if (photoCache.has(key)) {
-    return photoCache.get(key) ?? null;
-  }
+  if (photoCache.has(key)) return photoCache.get(key) ?? null;
 
   try {
-    const placeId = await findPlaceId(placeName, neighbourhood);
-    if (!placeId) {
-      photoCache.set(key, null);
-      return null;
-    }
+    const place    = await findPlace(placeName, neighbourhood);
+    const photoName = place?.photos?.[0]?.name ?? null;
+    if (!photoName) { photoCache.set(key, null); return null; }
 
-    const details = await fetchRawDetails(placeId);
-    const photoRef = details?.photos?.[0]?.photo_reference ?? null;
-
-    if (!photoRef) {
-      photoCache.set(key, null);
-      return null;
-    }
-
-    const url = buildPhotoUrl(photoRef);
+    const url = await resolvePhotoUrl(photoName);
     photoCache.set(key, url);
     return url;
   } catch {
-    // Graceful degradation — never throw to callers
     photoCache.set(key, null);
     return null;
   }
 }
 
 /**
- * Returns enriched venue details from the Google Places API, or null
- * if the venue cannot be found or the API call fails.
+ * Returns enriched venue details from the Places API (New), or null if the
+ * venue cannot be found or the API call fails.
  *
- * Internally calls getVenuePhoto so both the photo and the structured
- * details are retrieved in a single lookup (two API calls total).
+ * Warms the photoCache as a side-effect so getVenuePhoto never needs a
+ * separate lookup for the same venue.
  *
- * Results are held in an in-memory cache for the process lifetime and
- * in the Next.js data cache for 24 hours.
- *
+ * Dual-layer caching: in-memory Map + Next.js data cache (24 h).
  * SERVER-SIDE ONLY.
  */
 export async function getVenueDetails(
@@ -205,43 +176,27 @@ export async function getVenueDetails(
   assertServerSide();
 
   const key = buildCacheKey(placeName, neighbourhood);
-
-  if (detailsCache.has(key)) {
-    return detailsCache.get(key) ?? null;
-  }
+  if (detailsCache.has(key)) return detailsCache.get(key) ?? null;
 
   try {
-    const placeId = await findPlaceId(placeName, neighbourhood);
-    if (!placeId) {
-      detailsCache.set(key, null);
-      return null;
-    }
+    const place = await findPlace(placeName, neighbourhood);
+    if (!place) { detailsCache.set(key, null); return null; }
 
-    const raw = await fetchRawDetails(placeId);
-    if (!raw) {
-      detailsCache.set(key, null);
-      return null;
-    }
-
-    const photoRef = raw.photos?.[0]?.photo_reference ?? null;
-    const photo_url = photoRef ? buildPhotoUrl(photoRef) : null;
+    const photoName = place.photos?.[0]?.name ?? null;
+    const photo_url = photoName ? await resolvePhotoUrl(photoName) : null;
 
     const result: GooglePlaceResult = {
-      place_id: placeId,
-      formatted_address: raw.formatted_address ?? null,
-      formatted_phone_number: raw.formatted_phone_number ?? null,
-      opening_hours: raw.opening_hours?.weekday_text ?? null,
-      rating: raw.rating ?? null,
-      website: raw.website ?? null,
+      place_id:               place.id,
+      formatted_address:      place.formattedAddress ?? null,
+      formatted_phone_number: place.internationalPhoneNumber ?? null,
+      opening_hours:          place.regularOpeningHours?.weekdayDescriptions ?? null,
+      rating:                 place.rating ?? null,
+      website:                place.websiteUri ?? null,
       photo_url,
     };
 
     detailsCache.set(key, result);
-
-    // Keep the photo cache warm as a side-effect
-    if (!photoCache.has(key)) {
-      photoCache.set(key, photo_url);
-    }
+    if (!photoCache.has(key)) photoCache.set(key, photo_url);
 
     return result;
   } catch {
