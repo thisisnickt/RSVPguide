@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase";
+import { fetchVenuePhoto } from "@/lib/actions/fetchVenuePhoto";
 import CalendarCard from "@/components/CalendarCard";
 import type { Event, Venue } from "@/lib/types";
 
@@ -93,6 +94,9 @@ export default async function VenuePage({
 
   if (!venue) notFound();
 
+  // Resolve hero photo: use stored URL or fetch live from Google Places
+  const heroPhoto = venue.photo_url ?? (await fetchVenuePhoto(venue.name, venue.neighbourhood));
+
   // Attach venue to events for CalendarCard
   const events: EventWithVenue[] = rawEvents
     .filter((e) => e.venue_id === venue.id)
@@ -110,9 +114,9 @@ export default async function VenuePage({
     <article>
       {/* ── Hero image ────────────────────────────────────────────── */}
       <div className="relative h-[400px] w-full overflow-hidden bg-gradient-to-br from-[#1C1C1C] to-[#0D0D0D]">
-        {venue.photo_url && (
+        {heroPhoto && (
           <Image
-            src={venue.photo_url}
+            src={heroPhoto}
             alt={venue.name}
             fill
             priority
