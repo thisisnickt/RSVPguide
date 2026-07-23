@@ -41,8 +41,12 @@ export interface Venue {
   updated_at: string;
 }
 
-// Convenience type for creating a new venue (omit server-generated fields)
-export type VenueInsert = Omit<Venue, "id" | "created_at" | "updated_at"> & {
+// Convenience type for creating a new venue (omit server-generated fields and
+// fields with DB defaults so they don't have to be specified on every insert)
+export type VenueInsert = Omit<
+  Venue,
+  "id" | "created_at" | "updated_at" | "is_featured" | "is_verified" | "is_active"
+> & {
   is_featured?: boolean;
   is_verified?: boolean;
   is_active?: boolean;
