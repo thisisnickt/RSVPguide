@@ -1,67 +1,89 @@
-import { format, parseISO } from "date-fns";
-import type { Event, Venue } from "@/lib/types";
+"use client";
 
-interface DigestPreviewProps {
-  weekStart: string;
-  weekEnd: string;
-  events: Event[];
-  featuredVenues: Venue[];
-}
+import { useState } from "react";
 
-export default function DigestPreview({
-  weekStart,
-  weekEnd,
-  events,
-  featuredVenues,
-}: DigestPreviewProps) {
-  const start = parseISO(weekStart);
-  const end = parseISO(weekEnd);
+export default function DigestPreview() {
+  const [email, setEmail]     = useState("");
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError]     = useState<string | null>(null);
+
+  const subscribe = async () => {
+    const trimmed = email.trim();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setError("Enter a valid email address.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/digest-subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed }),
+      });
+      if (!res.ok) throw new Error();
+      setSuccess(true);
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="rounded-lg border border-brand-border bg-brand-card p-6 space-y-6">
-      <div className="border-b border-brand-border pb-4">
-        <h2 className="font-playfair text-2xl font-bold text-brand-text-primary">
-          RSVPGuide Weekly Digest
-        </h2>
-        <p className="mt-1 text-sm text-brand-text-secondary">
-          {format(start, "d MMMM")} – {format(end, "d MMMM yyyy")}
+    <div className="overflow-hidden rounded-xl border border-[#2A2A2A] bg-[#141414]">
+
+      {/* Header band */}
+      <div className="border-b border-[#2A2A2A] bg-[#1C1C1C] px-6 py-5">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#C9A84C]">
+          Weekly digest
+        </p>
+        <h3 className="mt-1 font-playfair text-xl font-bold text-[#F0EDE6]">
+          Get Singapore&apos;s best nights, weekly.
+        </h3>
+        <p className="mt-1 text-sm text-[#A89F8C]">
+          Curated venues, upcoming events, and exclusive promotions — every Friday.
         </p>
       </div>
 
-      {featuredVenues.length > 0 && (
-        <section>
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-brand-gold">
-            Featured Venues
-          </h3>
-          <ul className="space-y-2">
-            {featuredVenues.map((venue) => (
-              <li key={venue.id} className="text-sm text-brand-text-primary">
-                <span className="font-medium">{venue.name}</span>
-                <span className="ml-2 text-brand-text-secondary">{venue.neighbourhood}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {events.length > 0 && (
-        <section>
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-brand-gold">
-            Upcoming Events
-          </h3>
-          <ul className="space-y-3">
-            {events.map((event) => (
-              <li key={event.id} className="border-l-2 border-brand-gold pl-3">
-                <p className="text-sm font-medium text-brand-text-primary">{event.title}</p>
-                <p className="text-xs text-brand-text-secondary">
-                  {format(parseISO(event.event_date), "EEEE, d MMMM")} &bull; {event.start_time}
-                  {event.venue ? ` — ${event.venue.name}` : ""}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {/* Input area */}
+      <div className="px-6 py-5">
+        {success ? (
+          <div className="flex flex-col items-center gap-2 py-3 text-center">
+            <span className="text-2xl text-[#C9A84C]">✦</span>
+            <p className="font-playfair text-lg text-[#F0EDE6]">You&apos;re on the list.</p>
+            <p className="text-sm text-[#A89F8C]">Expect us in your inbox this Friday.</p>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); if (error) setError(null); }}
+                onKeyDown={(e) => e.key === "Enter" && !loading && subscribe()}
+                placeholder="your@email.com"
+                className="flex-1 rounded-lg border border-[#2A2A2A] bg-[#1C1C1C] px-4 py-2.5 text-sm text-[#F0EDE6] placeholder-[#A89F8C] outline-none transition-colors focus:border-[#C9A84C]/60"
+              />
+              <button
+                type="button"
+                onClick={subscribe}
+                disabled={loading}
+                className="rounded-lg bg-[#C9A84C] px-5 py-2.5 text-sm font-semibold text-[#0D0D0D] transition-opacity duration-200 hover:opacity-90 disabled:opacity-50"
+              >
+                {loading ? "…" : "Subscribe"}
+              </button>
+            </div>
+            {error && (
+              <p className="mt-2 text-xs text-red-400">{error}</p>
+            )}
+            <p className="mt-3 text-[11px] text-[#A89F8C]">
+              No spam, ever. Unsubscribe any time.
+            </p>
+          </>
+        )}
+      </div>
     </div>
   );
 }

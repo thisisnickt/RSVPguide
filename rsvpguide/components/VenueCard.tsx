@@ -1,48 +1,114 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { Venue } from "@/lib/types";
+import type { Venue, VenueCategory } from "@/lib/types";
 
 interface VenueCardProps {
   venue: Venue;
+  priority?: boolean;
 }
 
-export default function VenueCard({ venue }: VenueCardProps) {
+// Colour-coded per category — dark tinted badges that read well on the photo
+const CATEGORY_BADGE: Record<VenueCategory, string> = {
+  "Dance Club":   "bg-rose-950/80 text-rose-300 border border-rose-700/40",
+  "Cocktail Bar": "bg-sky-950/80 text-sky-300 border border-sky-700/40",
+  "Rooftop Bar":  "bg-emerald-950/80 text-emerald-300 border border-emerald-700/40",
+  "Pub / Brewery":"bg-amber-950/80 text-amber-300 border border-amber-700/40",
+};
+
+export default function VenueCard({ venue, priority = false }: VenueCardProps) {
+  const badge = CATEGORY_BADGE[venue.category];
+
   return (
-    <Link href={`/venues/${venue.slug}`} className="group block">
-      <div className="overflow-hidden rounded-lg border border-brand-border bg-brand-card transition-colors hover:border-brand-gold">
-        <div className="relative h-48 w-full bg-brand-surface">
-          {venue.photo_url ? (
-            <Image
-              src={venue.photo_url}
-              alt={venue.name}
-              fill
-              className="object-cover transition-transform duration-300 group-hover:scale-105"
-              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <span className="text-4xl text-brand-text-secondary opacity-30">&#9965;</span>
-            </div>
-          )}
-          {venue.is_featured && (
-            <span className="absolute left-2 top-2 rounded bg-brand-gold px-2 py-0.5 text-xs font-semibold text-brand-bg">
-              Featured
+    <div className="group relative flex flex-col overflow-hidden rounded-xl border border-[#2A2A2A] bg-[#141414] transition-all duration-300 hover:border-[#C9A84C]/40 hover:bg-[#181818] hover:shadow-[0_0_24px_rgba(201,168,76,0.08)]">
+
+      {/* ── Stretched card link (z-[1]) ── */}
+      <Link
+        href={`/venues/${venue.slug}`}
+        className="absolute inset-0 z-[1]"
+        aria-label={`View ${venue.name}`}
+      />
+
+      {/* ── Photo ── */}
+      <div className="relative h-52 w-full overflow-hidden bg-gradient-to-br from-[#1C1C1C] via-[#141414] to-[#0D0D0D]">
+        {venue.photo_url && (
+          <Image
+            src={venue.photo_url}
+            alt={venue.name}
+            fill
+            priority={priority}
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+          />
+        )}
+
+        {/* Gradient fade at bottom of photo */}
+        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#141414] to-transparent" />
+
+        {/* Category badge */}
+        <span className={`absolute left-3 top-3 z-[2] rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-widest backdrop-blur-sm ${badge}`}>
+          {venue.category}
+        </span>
+
+        {/* Featured badge */}
+        {venue.is_featured && (
+          <span className="absolute right-3 top-3 z-[2] rounded-full bg-[#C9A84C] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[#0D0D0D]">
+            Featured
+          </span>
+        )}
+      </div>
+
+      {/* ── Body ── */}
+      <div className="flex flex-1 flex-col p-4 pb-3">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#C9A84C]">
+          {venue.neighbourhood}
+        </p>
+        <h3 className="mt-1 font-playfair text-[17px] font-semibold leading-snug text-[#F0EDE6] transition-colors duration-200 group-hover:text-[#C9A84C]">
+          {venue.name}
+        </h3>
+        {venue.description && (
+          <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-[#A89F8C]">
+            {venue.description}
+          </p>
+        )}
+
+        {/* Pills row */}
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {venue.hours && (
+            <span className="rounded-full border border-[#2A2A2A] bg-[#1C1C1C] px-2.5 py-0.5 text-[11px] text-[#A89F8C]">
+              {venue.hours}
             </span>
           )}
-        </div>
-        <div className="p-4">
-          <h3 className="font-playfair text-lg font-semibold text-brand-text-primary group-hover:text-brand-gold transition-colors">
-            {venue.name}
-          </h3>
-          <p className="mt-1 text-sm text-brand-text-secondary line-clamp-2">{venue.description}</p>
-          <div className="mt-3 flex items-center justify-between">
-            <span className="text-xs text-brand-text-secondary">{venue.neighbourhood}</span>
-            <span className="rounded bg-brand-surface px-2 py-0.5 text-xs text-brand-text-secondary">
-              {venue.category}
+          {venue.known_promotions && (
+            <span className="rounded-full border border-[#C9A84C]/25 bg-[#C9A84C]/10 px-2.5 py-0.5 text-[11px] text-[#C9A84C]">
+              {venue.known_promotions}
             </span>
-          </div>
+          )}
         </div>
       </div>
-    </Link>
+
+      {/* ── Buttons (z-[2] to sit above stretched link) ── */}
+      <div className="relative z-[2] flex gap-2 px-4 pb-4">
+        {(venue.booking_url ?? venue.website) && (
+          <a
+            href={venue.booking_url ?? venue.website ?? "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 rounded-lg bg-[#C9A84C] py-2 text-center text-xs font-semibold text-[#0D0D0D] transition-opacity duration-200 hover:opacity-90"
+          >
+            Book / Tickets
+          </a>
+        )}
+        {venue.website && (
+          <a
+            href={venue.website}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 rounded-lg border border-[#2A2A2A] py-2 text-center text-xs font-medium text-[#A89F8C] transition-colors duration-200 hover:border-[#C9A84C]/40 hover:text-[#F0EDE6]"
+          >
+            Website
+          </a>
+        )}
+      </div>
+    </div>
   );
 }

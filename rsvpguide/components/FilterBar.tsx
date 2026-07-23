@@ -1,62 +1,115 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import type { FilterOptions, VenueCategory } from "@/lib/types";
+import { FiSearch } from "react-icons/fi";
+import type { VenueCategory } from "@/lib/types";
 
-const CATEGORIES: VenueCategory[] = [
-  "Dance Club",
-  "Cocktail Bar",
-  "Rooftop Bar",
-  "Pub / Brewery",
+// Category pills — display label maps to the DB enum value
+const CATEGORY_PILLS: { label: string; value: VenueCategory | "" }[] = [
+  { label: "All",              value: "" },
+  { label: "Dance Clubs",      value: "Dance Club" },
+  { label: "Cocktail Bars",    value: "Cocktail Bar" },
+  { label: "Rooftop Bars",     value: "Rooftop Bar" },
+  { label: "Pubs & Breweries", value: "Pub / Brewery" },
 ];
 
+const NEIGHBOURHOODS = [
+  "Clarke Quay",
+  "Marina Bay",
+  "Tanjong Pagar",
+  "Amoy Street",
+  "Bukit Pasoh",
+  "Boat Quay",
+  "CBD",
+  "City Hall",
+  "Orchard",
+  "Bugis",
+  "Chinatown",
+  "Club Street",
+  "Duxton",
+  "Bras Basah",
+] as const;
+
 interface FilterBarProps {
-  filters: FilterOptions;
+  activeCategory: VenueCategory | "";
+  activeNeighbourhood: string;
+  onCategoryChange: (value: VenueCategory | "") => void;
+  onNeighbourhoodChange: (value: string) => void;
+  onSearchChange: (value: string) => void;
+  resultCount: number;
 }
 
-export default function FilterBar({ filters }: FilterBarProps) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const updateFilter = (key: keyof FilterOptions, value: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (value) {
-      params.set(key, value);
-    } else {
-      params.delete(key);
-    }
-    params.delete("page");
-    router.push(`?${params.toString()}`);
-  };
-
+export default function FilterBar({
+  activeCategory,
+  activeNeighbourhood,
+  onCategoryChange,
+  onNeighbourhoodChange,
+  onSearchChange,
+  resultCount,
+}: FilterBarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand-border bg-brand-card p-4">
-      <input
-        type="text"
-        placeholder="Search venues..."
-        defaultValue={filters.search ?? ""}
-        onChange={(e) => updateFilter("search", e.target.value)}
-        className="min-w-[200px] flex-1 rounded border border-brand-border bg-brand-surface px-3 py-2 text-sm text-brand-text-primary placeholder-brand-text-secondary outline-none focus:border-brand-gold"
-      />
-      <select
-        value={filters.category ?? ""}
-        onChange={(e) => updateFilter("category", e.target.value)}
-        className="rounded border border-brand-border bg-brand-surface px-3 py-2 text-sm text-brand-text-primary outline-none focus:border-brand-gold"
-      >
-        <option value="">All Categories</option>
-        {CATEGORIES.map((cat) => (
-          <option key={cat} value={cat}>
-            {cat}
-          </option>
-        ))}
-      </select>
-      <input
-        type="text"
-        placeholder="Neighbourhood..."
-        defaultValue={filters.neighbourhood ?? ""}
-        onChange={(e) => updateFilter("neighbourhood", e.target.value)}
-        className="w-44 rounded border border-brand-border bg-brand-surface px-3 py-2 text-sm text-brand-text-primary placeholder-brand-text-secondary outline-none focus:border-brand-gold"
-      />
+    // sticky top-14 = sits flush below the 56px header
+    <div className="sticky top-14 z-40 border-b border-[#2A2A2A] bg-[#0D0D0D]/95 backdrop-blur-sm">
+      <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
+
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-5">
+
+          {/* ── Category pills ── */}
+          <div className="flex flex-wrap gap-2">
+            {CATEGORY_PILLS.map(({ label, value }) => (
+              <button
+                key={value}
+                onClick={() => onCategoryChange(value)}
+                className={`rounded-full border px-3.5 py-1 text-[11px] font-medium uppercase tracking-wider transition-all duration-200 ${
+                  activeCategory === value
+                    ? "border-[#C9A84C] bg-[#C9A84C] text-[#0D0D0D]"
+                    : "border-[#2A2A2A] text-[#A89F8C] hover:border-[#C9A84C]/50 hover:text-[#F0EDE6]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Right controls ── */}
+          <div className="flex flex-1 flex-wrap items-center gap-3">
+
+            {/* Neighbourhood dropdown */}
+            <select
+              value={activeNeighbourhood}
+              onChange={(e) => onNeighbourhoodChange(e.target.value)}
+              className="rounded-lg border border-[#2A2A2A] bg-[#1C1C1C] px-3 py-1.5 text-[12px] text-[#A89F8C] outline-none transition-colors focus:border-[#C9A84C]/50 focus:text-[#F0EDE6]"
+            >
+              <option value="">All Neighbourhoods</option>
+              {NEIGHBOURHOODS.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+
+            {/* Search input */}
+            <div className="relative flex-1 min-w-[160px]">
+              <FiSearch
+                size={13}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A89F8C]"
+              />
+              <input
+                type="text"
+                placeholder="Search venues…"
+                onChange={(e) => onSearchChange(e.target.value)}
+                className="w-full rounded-lg border border-[#2A2A2A] bg-[#1C1C1C] py-1.5 pl-8 pr-3 text-[12px] text-[#F0EDE6] placeholder-[#A89F8C] outline-none transition-colors focus:border-[#C9A84C]/50"
+              />
+            </div>
+
+            {/* Result count */}
+            <p className="flex-shrink-0 text-[12px] text-[#A89F8C]">
+              Showing{" "}
+              <span className="text-[#F0EDE6]">{resultCount}</span>{" "}
+              venue{resultCount !== 1 ? "s" : ""}
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
