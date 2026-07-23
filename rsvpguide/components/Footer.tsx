@@ -43,16 +43,15 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="mt-10 border-t border-[#2A2A2A] pt-6">
           <p className="text-center text-xs text-[#A89F8C]">
-            © 2026 RSVPguide.com &nbsp;·&nbsp; A{" "}
+            © 2026 RSVPguide.com &nbsp;·&nbsp; Owned and managed by{" "}
             <a
               href="https://launched.asia"
               target="_blank"
               rel="noopener noreferrer"
               className="transition-colors hover:text-[#C9A84C]"
             >
-              Launched.asia
-            </a>{" "}
-            property
+              Launched Studios
+            </a>
           </p>
         </div>
       </div>
