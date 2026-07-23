@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category");
-    const city = searchParams.get("city");
+    const neighbourhood = searchParams.get("neighbourhood");
     const search = searchParams.get("search");
     const page = parseInt(searchParams.get("page") ?? "1", 10);
     const limit = parseInt(searchParams.get("limit") ?? "12", 10);
@@ -21,8 +21,8 @@ export async function GET(request: NextRequest) {
       .order("name", { ascending: true })
       .range(offset, offset + limit - 1);
 
-    if (category) query = query.contains("categories", [category]);
-    if (city) query = query.ilike("city", `%${city}%`);
+    if (category) query = query.eq("category", category);
+    if (neighbourhood) query = query.ilike("neighbourhood", `%${neighbourhood}%`);
     if (search) query = query.ilike("name", `%${search}%`);
 
     const { data, error, count } = await query;

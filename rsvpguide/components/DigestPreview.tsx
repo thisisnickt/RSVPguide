@@ -37,7 +37,7 @@ export default function DigestPreview({
             {featuredVenues.map((venue) => (
               <li key={venue.id} className="text-sm text-brand-text-primary">
                 <span className="font-medium">{venue.name}</span>
-                <span className="ml-2 text-brand-text-secondary">{venue.city}</span>
+                <span className="ml-2 text-brand-text-secondary">{venue.neighbourhood}</span>
               </li>
             ))}
           </ul>
@@ -54,7 +54,7 @@ export default function DigestPreview({
               <li key={event.id} className="border-l-2 border-brand-gold pl-3">
                 <p className="text-sm font-medium text-brand-text-primary">{event.title}</p>
                 <p className="text-xs text-brand-text-secondary">
-                  {format(parseISO(event.date), "EEEE, d MMMM")} &bull; {event.start_time}
+                  {format(parseISO(event.event_date), "EEEE, d MMMM")} &bull; {event.start_time}
                   {event.venue ? ` — ${event.venue.name}` : ""}
                 </p>
               </li>

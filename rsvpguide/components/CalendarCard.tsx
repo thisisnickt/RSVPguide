@@ -7,7 +7,7 @@ interface CalendarCardProps {
 }
 
 export default function CalendarCard({ event }: CalendarCardProps) {
-  const eventDate = parseISO(event.date);
+  const eventDate = parseISO(event.event_date);
 
   return (
     <div className="flex gap-4 rounded-lg border border-brand-border bg-brand-card p-4 transition-colors hover:border-brand-gold">
@@ -36,9 +36,9 @@ export default function CalendarCard({ event }: CalendarCardProps) {
           <span className="text-xs text-brand-text-secondary">
             {event.start_time}{event.end_time ? ` – ${event.end_time}` : ""}
           </span>
-          {event.ticket_price !== undefined && (
+          {event.ticket_price && (
             <span className="text-xs font-medium text-brand-gold">
-              {event.ticket_price === 0 ? "Free" : `£${event.ticket_price}`}
+              {event.ticket_price}
             </span>
           )}
         </div>

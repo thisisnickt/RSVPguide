@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const venue_id = searchParams.get("venue_id");
     const date = searchParams.get("date");
-    const category = searchParams.get("category");
+    const performer_type = searchParams.get("performer_type");
     const page = parseInt(searchParams.get("page") ?? "1", 10);
     const limit = parseInt(searchParams.get("limit") ?? "12", 10);
     const offset = (page - 1) * limit;
@@ -17,13 +17,13 @@ export async function GET(request: NextRequest) {
       .from("events")
       .select("*, venue:venues(*)", { count: "exact" })
       .eq("is_active", true)
-      .gte("date", new Date().toISOString().split("T")[0])
-      .order("date", { ascending: true })
+      .gte("event_date", new Date().toISOString().split("T")[0])
+      .order("event_date", { ascending: true })
       .range(offset, offset + limit - 1);
 
     if (venue_id) query = query.eq("venue_id", venue_id);
-    if (date) query = query.eq("date", date);
-    if (category) query = query.contains("categories", [category]);
+    if (date) query = query.eq("event_date", date);
+    if (performer_type) query = query.eq("performer_type", performer_type);
 
     const { data, error, count } = await query;
 

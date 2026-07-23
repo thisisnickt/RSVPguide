@@ -1,17 +1,13 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import type { FilterOptions } from "@/lib/types";
+import type { FilterOptions, VenueCategory } from "@/lib/types";
 
-const CATEGORIES = [
-  "Bar",
-  "Club",
-  "Restaurant",
-  "Rooftop",
-  "Live Music",
-  "Comedy",
-  "Theatre",
-  "Gallery",
+const CATEGORIES: VenueCategory[] = [
+  "Dance Club",
+  "Cocktail Bar",
+  "Rooftop Bar",
+  "Pub / Brewery",
 ];
 
 interface FilterBarProps {
@@ -56,10 +52,10 @@ export default function FilterBar({ filters }: FilterBarProps) {
       </select>
       <input
         type="text"
-        placeholder="City..."
-        defaultValue={filters.city ?? ""}
-        onChange={(e) => updateFilter("city", e.target.value)}
-        className="w-36 rounded border border-brand-border bg-brand-surface px-3 py-2 text-sm text-brand-text-primary placeholder-brand-text-secondary outline-none focus:border-brand-gold"
+        placeholder="Neighbourhood..."
+        defaultValue={filters.neighbourhood ?? ""}
+        onChange={(e) => updateFilter("neighbourhood", e.target.value)}
+        className="w-44 rounded border border-brand-border bg-brand-surface px-3 py-2 text-sm text-brand-text-primary placeholder-brand-text-secondary outline-none focus:border-brand-gold"
       />
     </div>
   );

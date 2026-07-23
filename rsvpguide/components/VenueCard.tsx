@@ -11,9 +11,9 @@ export default function VenueCard({ venue }: VenueCardProps) {
     <Link href={`/venues/${venue.slug}`} className="group block">
       <div className="overflow-hidden rounded-lg border border-brand-border bg-brand-card transition-colors hover:border-brand-gold">
         <div className="relative h-48 w-full bg-brand-surface">
-          {venue.image_url ? (
+          {venue.photo_url ? (
             <Image
-              src={venue.image_url}
+              src={venue.photo_url}
               alt={venue.name}
               fill
               className="object-cover transition-transform duration-300 group-hover:scale-105"
@@ -36,22 +36,11 @@ export default function VenueCard({ venue }: VenueCardProps) {
           </h3>
           <p className="mt-1 text-sm text-brand-text-secondary line-clamp-2">{venue.description}</p>
           <div className="mt-3 flex items-center justify-between">
-            <span className="text-xs text-brand-text-secondary">{venue.city}</span>
-            {venue.google_rating && (
-              <span className="flex items-center gap-1 text-xs text-brand-gold">
-                &#9733; {venue.google_rating.toFixed(1)}
-              </span>
-            )}
+            <span className="text-xs text-brand-text-secondary">{venue.neighbourhood}</span>
+            <span className="rounded bg-brand-surface px-2 py-0.5 text-xs text-brand-text-secondary">
+              {venue.category}
+            </span>
           </div>
-          {venue.categories.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {venue.categories.slice(0, 3).map((cat) => (
-                <span key={cat} className="rounded bg-brand-surface px-2 py-0.5 text-xs text-brand-text-secondary">
-                  {cat}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </Link>

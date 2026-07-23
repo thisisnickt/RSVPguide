@@ -6,7 +6,6 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
-    const type = searchParams.get("type");
 
     const supabase = createServiceRoleClient();
     let query = supabase
@@ -15,7 +14,6 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false });
 
     if (status) query = query.eq("status", status);
-    if (type) query = query.eq("type", type);
 
     const { data, error, count } = await query;
 
