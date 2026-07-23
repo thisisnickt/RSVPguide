@@ -59,7 +59,7 @@ export type VenueUpdate = Partial<VenueInsert>;
 // ------------------------------------------------------------
 export interface Event {
   id: string;
-  venue_id: string;
+  venue_id: string | null; // null for externally-synced events with no venue match
   title: string;
   description: string | null;
   event_date: string;        // ISO date string, e.g. "2025-08-15"
@@ -79,6 +79,7 @@ export interface Event {
 }
 
 export type EventInsert = Omit<Event, "id" | "created_at" | "venue"> & {
+  venue_id?: string | null;
   is_recurring?: boolean;
   is_active?: boolean;
 };
