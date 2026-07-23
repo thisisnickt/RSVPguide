@@ -5,6 +5,8 @@ import CalendarCard from "@/components/CalendarCard";
 import DigestPreview from "@/components/DigestPreview";
 import type { Event, Venue } from "@/lib/types";
 
+export const revalidate = 3600; // ISR: regenerate at most once per hour
+
 const STATS = [
   { value: "30", label: "Premium venues" },
   { value: "12", label: "Weekly events" },
@@ -123,7 +125,7 @@ export default async function HomePage() {
           </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             {featuredVenues.map((venue, i) => (
-              <VenueCard key={venue.id} venue={venue} priority={i < 2} />
+              <VenueCard key={venue.id} venue={venue} priority={i < 4} />
             ))}
           </div>
         </section>

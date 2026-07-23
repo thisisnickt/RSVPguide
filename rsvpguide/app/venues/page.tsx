@@ -9,6 +9,8 @@ export const metadata: Metadata = {
     "Browse Singapore's best bars, clubs, rooftop bars and nightlife venues.",
 };
 
+export const revalidate = 3600;
+
 async function getAllVenues(): Promise<Venue[]> {
   try {
     const supabase = createAdminClient();

@@ -10,6 +10,7 @@ import type { Event, Venue } from "@/lib/types";
 // ── Static generation ─────────────────────────────────────────────────────────
 
 export const dynamicParams = true; // SSR on demand for slugs not in build
+export const revalidate    = 3600; // ISR: regenerate at most once per hour
 
 export async function generateStaticParams() {
   try {
@@ -31,21 +32,34 @@ export async function generateMetadata({
 }: {
   params: { slug: string };
 }): Promise<Metadata> {
+  const BASE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://rsvpguide.com";
+
   try {
     const supabase = createAdminClient();
     const { data: v } = await supabase
       .from("venues")
-      .select("name, description, neighbourhood, category")
+      .select("name, description, neighbourhood, category, photo_url")
       .eq("slug", params.slug)
       .single();
 
     if (!v) return { title: "Venue Not Found" };
 
+    const title       = v.name;
+    const description = v.description
+      ?? `${v.name} — ${v.category} in ${v.neighbourhood}, Singapore.`;
+    const canonical   = `${BASE}/venues/${params.slug}`;
+
     return {
-      title: v.name,
-      description:
-        v.description ??
-        `${v.name} — ${v.category} in ${v.neighbourhood}, Singapore.`,
+      title,
+      description,
+      alternates:  { canonical },
+      openGraph: {
+        title,
+        description,
+        url:    canonical,
+        images: v.photo_url ? [{ url: v.photo_url, width: 800, alt: v.name }] : [],
+      },
+      twitter: { card: "summary_large_image", title, description },
     };
   } catch {
     return { title: "Venue" };
@@ -77,11 +91,47 @@ async function getVenueAndEvents(slug: string) {
 // ── Category badge colour ─────────────────────────────────────────────────────
 
 const BADGE: Record<string, string> = {
-  "Dance Club":   "bg-rose-950/80 text-rose-300",
-  "Cocktail Bar": "bg-sky-950/80 text-sky-300",
-  "Rooftop Bar":  "bg-emerald-950/80 text-emerald-300",
-  "Pub / Brewery":"bg-amber-950/80 text-amber-300",
+  "Dance Club":    "bg-rose-950/80 text-rose-300",
+  "Cocktail Bar":  "bg-sky-950/80 text-sky-300",
+  "Rooftop Bar":   "bg-emerald-950/80 text-emerald-300",
+  "Pub / Brewery": "bg-amber-950/80 text-amber-300",
 };
+
+// ── JSON-LD schema helpers ────────────────────────────────────────────────────
+
+function buildJsonLd(venue: Venue) {
+  const schemaType =
+    venue.category === "Dance Club" ? "NightClub" : "BarOrPub";
+
+  return {
+    "@context": "https://schema.org",
+    "@type": schemaType,
+    name: venue.name,
+    ...(venue.description && { description: venue.description }),
+    ...(venue.address && {
+      address: {
+        "@type": "PostalAddress",
+        streetAddress:   venue.address,
+        addressLocality: "Singapore",
+        addressCountry:  "SG",
+      },
+    }),
+    ...(venue.phone   && { telephone: venue.phone }),
+    ...(venue.website && { url:       venue.website }),
+    ...(venue.hours   && { openingHours: venue.hours }),
+    ...(["Cocktail Bar", "Rooftop Bar"].includes(venue.category) && {
+      servesCuisine: "Cocktails",
+    }),
+    ...(venue.instagram && {
+      sameAs: [
+        `https://instagram.com/${venue.instagram.replace("@", "")}`,
+      ],
+    }),
+    ...(venue.photo_url && {
+      image: venue.photo_url,
+    }),
+  };
+}
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -112,6 +162,12 @@ export default async function VenuePage({
 
   return (
     <article>
+      {/* ── JSON-LD structured data ───────────────────────────────── */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildJsonLd(venue)) }}
+      />
+
       {/* ── Hero image ────────────────────────────────────────────── */}
       <div className="relative h-[400px] w-full overflow-hidden bg-gradient-to-br from-[#1C1C1C] to-[#0D0D0D]">
         {heroPhoto && (

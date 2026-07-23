@@ -9,6 +9,8 @@ export const metadata: Metadata = {
   description: "Live music, DJ nights and events in Singapore this week.",
 };
 
+export const revalidate = 3600;
+
 type EventWithVenue = Event & { venue: Venue };
 
 async function getEvents(): Promise<EventWithVenue[]> {
