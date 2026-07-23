@@ -1,51 +1,64 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
-import type { ApiResponse, Event } from "@/lib/types";
+import type { Event, Venue } from "@/lib/types";
+
+type EventWithVenue = Event & {
+  venue: Pick<Venue, "name" | "slug" | "neighbourhood">;
+};
+
+// ── GET /api/events ───────────────────────────────────────────────────────────
+// Query params:
+//   from_date?  ISO date, default: today
+//   to_date?    ISO date, default: today + 14 days
+//   venue_id?   UUID, filter to a single venue
+//   limit?      default 20, max 100
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const venue_id = searchParams.get("venue_id");
-    const date = searchParams.get("date");
-    const performer_type = searchParams.get("performer_type");
-    const page = parseInt(searchParams.get("page") ?? "1", 10);
-    const limit = parseInt(searchParams.get("limit") ?? "12", 10);
-    const offset = (page - 1) * limit;
+    const sp = new URL(request.url).searchParams;
+
+    const today   = new Date().toISOString().split("T")[0];
+    const in14    = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+                      .toISOString().split("T")[0];
+
+    const fromDate = sp.get("from_date") ?? today;
+    const toDate   = sp.get("to_date")   ?? in14;
+    const venueId  = sp.get("venue_id")  ?? null;
+    const limit    = Math.min(Math.max(parseInt(sp.get("limit") ?? "20", 10), 1), 100);
+
+    // Basic date validation
+    if (fromDate > toDate) {
+      return NextResponse.json(
+        { error: "from_date must not be after to_date" },
+        { status: 400 }
+      );
+    }
 
     const supabase = createAdminClient();
+
     let query = supabase
       .from("events")
-      .select("*, venue:venues(*)", { count: "exact" })
+      .select("*, venue:venues(name, slug, neighbourhood)")
       .eq("is_active", true)
-      .gte("event_date", new Date().toISOString().split("T")[0])
-      .order("event_date", { ascending: true })
-      .range(offset, offset + limit - 1);
+      .gte("event_date", fromDate)
+      .lte("event_date", toDate)
+      .order("event_date",  { ascending: true })
+      .order("start_time",  { ascending: true })
+      .limit(limit);
 
-    if (venue_id) query = query.eq("venue_id", venue_id);
-    if (date) query = query.eq("event_date", date);
-    if (performer_type) query = query.eq("performer_type", performer_type);
+    if (venueId) query = query.eq("venue_id", venueId);
 
-    const { data, error, count } = await query;
-
-    if (error) throw error;
-
-    return NextResponse.json<ApiResponse<Event[]>>({ data: data ?? [], count: count ?? 0 });
-  } catch (error) {
-    return NextResponse.json({ data: [], error: "Failed to fetch events" }, { status: 500 });
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const supabase = createAdminClient();
-
-    const { data, error } = await supabase.from("events").insert(body).select().single();
+    const { data, error } = await query;
 
     if (error) throw error;
 
-    return NextResponse.json<ApiResponse<Event>>({ data }, { status: 201 });
-  } catch (error) {
-    return NextResponse.json({ data: null, error: "Failed to create event" }, { status: 500 });
+    return NextResponse.json({
+      events: (data ?? []) as EventWithVenue[],
+    });
+  } catch (e) {
+    console.error("[GET /api/events]", e);
+    return NextResponse.json({ error: "Failed to fetch events" }, { status: 500 });
   }
 }
