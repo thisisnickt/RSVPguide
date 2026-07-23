@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { FiMenu, FiX } from "react-icons/fi";
 
@@ -10,6 +11,32 @@ const NAV_LINKS = [
   { label: "Dining",      href: "/dining" },
   { label: "Promotions",  href: "/promotions" },
 ] as const;
+
+/** Renders /public/logo.png if present; falls back to the text logo. */
+function Logo() {
+  const [imgError, setImgError] = useState(false);
+
+  if (imgError) {
+    return (
+      <>
+        <span className="font-playfair text-xl font-bold tracking-tight text-white">RSVP</span>
+        <span className="font-playfair text-xl font-bold tracking-tight text-[#C9A84C]">guide</span>
+      </>
+    );
+  }
+
+  return (
+    <Image
+      src="/logo.png"
+      alt="RSVPguide"
+      width={120}
+      height={36}
+      priority
+      className="h-9 w-auto object-contain"
+      onError={() => setImgError(true)}
+    />
+  );
+}
 
 export default function Header() {
   const [open, setOpen] = useState(false);
@@ -24,8 +51,7 @@ export default function Header() {
           className="select-none"
           onClick={() => setOpen(false)}
         >
-          <span className="font-playfair text-xl font-bold tracking-tight text-white">RSVP</span>
-          <span className="font-playfair text-xl font-bold tracking-tight text-[#C9A84C]">guide</span>
+          <Logo />
         </Link>
 
         {/* ── Centre nav (desktop) ── */}
