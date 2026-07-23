@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceRoleClient } from "@/lib/supabase";
+import { createAdminClient } from "@/lib/supabase";
 import type { ApiResponse, Submission } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 
-    const supabase = createServiceRoleClient();
+    const supabase = createAdminClient();
     let query = supabase
       .from("submissions")
       .select("*", { count: "exact" })
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const supabase = createServiceRoleClient();
+    const supabase = createAdminClient();
 
     const submission = {
       ...body,

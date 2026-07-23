@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceRoleClient } from "@/lib/supabase";
+import { createAdminClient } from "@/lib/supabase";
 import type { ApiResponse, Event } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") ?? "12", 10);
     const offset = (page - 1) * limit;
 
-    const supabase = createServiceRoleClient();
+    const supabase = createAdminClient();
     let query = supabase
       .from("events")
       .select("*, venue:venues(*)", { count: "exact" })
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const supabase = createServiceRoleClient();
+    const supabase = createAdminClient();
 
     const { data, error } = await supabase.from("events").insert(body).select().single();
 

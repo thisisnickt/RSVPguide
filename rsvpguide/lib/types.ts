@@ -122,6 +122,31 @@ export type DigestSubscriberInsert = Omit<
 };
 
 // ------------------------------------------------------------
+// Google Places API
+// ------------------------------------------------------------
+
+/**
+ * Normalised result returned by getVenueDetails() in lib/googlePlaces.ts.
+ * All optional fields are null when the Places API did not return them.
+ */
+export interface GooglePlaceResult {
+  /** Google's stable place identifier */
+  place_id: string;
+  /** Full street address as returned by Google */
+  formatted_address: string | null;
+  /** International-format phone number, e.g. "+65 6336 0797" */
+  formatted_phone_number: string | null;
+  /** Array of human-readable opening-hours lines, one per weekday */
+  opening_hours: string[] | null;
+  /** Aggregate star rating (1–5) */
+  rating: number | null;
+  /** Venue's own website URL */
+  website: string | null;
+  /** Place Photo URL at 800 px width (via Google Places Photo API) */
+  photo_url: string | null;
+}
+
+// ------------------------------------------------------------
 // Shared utility types
 // ------------------------------------------------------------
 export interface FilterOptions {
