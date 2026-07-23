@@ -68,11 +68,14 @@ function inputCls(hasError: boolean) {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function SubmissionForm() {
-  const [fields, setFields]       = useState<Fields>(EMPTY);
-  const [errors, setErrors]       = useState<FieldErrors>({});
-  const [loading, setLoading]     = useState(false);
-  const [success, setSuccess]     = useState(false);
+  const [fields,    setFields]    = useState<Fields>(EMPTY);
+  const [errors,    setErrors]    = useState<FieldErrors>({});
+  const [loading,   setLoading]   = useState(false);
+  const [success,   setSuccess]   = useState(false);
   const [serverErr, setServerErr] = useState<string | null>(null);
+  // Captured before form reset so success message stays personal
+  const [sentName,  setSentName]  = useState("");
+  const [sentEmail, setSentEmail] = useState("");
 
   const set = (key: keyof Fields, val: string) => {
     setFields((p) => ({ ...p, [key]: val }));
@@ -91,11 +94,16 @@ export default function SubmissionForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(fields),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Server error");
+      }
+      setSentName(fields.contact_name.trim());
+      setSentEmail(fields.contact_email.trim());
       setSuccess(true);
       setFields(EMPTY);
-    } catch {
-      setServerErr("Something went wrong. Please try again.");
+    } catch (e) {
+      setServerErr(e instanceof Error ? e.message : "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -110,7 +118,8 @@ export default function SubmissionForm() {
           ✓
         </span>
         <p className="font-playfair text-xl text-[#F0EDE6]">
-          Thanks — we&apos;ll be in touch within 48 hours.
+          Thanks {sentName} — we&apos;ll review your submission and be in touch at{" "}
+          <span className="text-[#C9A84C]">{sentEmail}</span> within 48 hours.
         </p>
         <p className="text-sm text-[#A89F8C]">We review every submission personally.</p>
         <div

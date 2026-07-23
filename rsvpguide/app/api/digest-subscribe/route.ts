@@ -48,3 +48,42 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to subscribe" }, { status: 500 });
   }
 }
+
+// ── PATCH /api/digest-subscribe ───────────────────────────────────────────────
+// Body: { email }  — sets is_active = false (unsubscribe)
+
+export async function PATCH(request: NextRequest) {
+  let email: unknown;
+
+  try {
+    ({ email } = await request.json());
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (!email || typeof email !== "string") {
+    return NextResponse.json({ error: "Email is required" }, { status: 400 });
+  }
+
+  const normalised = email.toLowerCase().trim();
+
+  if (!EMAIL_RE.test(normalised)) {
+    return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
+  }
+
+  try {
+    const supabase = createAdminClient();
+
+    const { error } = await supabase
+      .from("digest_subscribers")
+      .update({ is_active: false })
+      .eq("email", normalised);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    console.error("[PATCH /api/digest-subscribe]", e);
+    return NextResponse.json({ error: "Failed to unsubscribe" }, { status: 500 });
+  }
+}

@@ -44,7 +44,7 @@ export default function Header() {
         {/* ── Right side ── */}
         <div className="flex items-center gap-3">
           <Link
-            href="/list-venue"
+            href="/submit"
             className="hidden items-center gap-1 rounded border border-[#C9A84C] px-4 py-1.5 text-[11px] font-semibold tracking-wide text-[#C9A84C] transition-all duration-200 hover:bg-[#C9A84C] hover:text-[#0D0D0D] sm:inline-flex"
           >
             List your venue →
@@ -77,7 +77,7 @@ export default function Header() {
               </Link>
             ))}
             <Link
-              href="/list-venue"
+              href="/submit"
               onClick={() => setOpen(false)}
               className="mt-1 inline-flex w-fit items-center gap-1 rounded border border-[#C9A84C] px-4 py-1.5 text-[11px] font-semibold tracking-wide text-[#C9A84C]"
             >

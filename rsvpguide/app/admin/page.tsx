@@ -12,41 +12,60 @@ interface Stats {
   pending: number;
 }
 
-// ── Cookie helpers ────────────────────────────────────────────────────────────
-
-const COOKIE = "rsvpguide_admin";
-
-function readCookie(): string {
-  if (typeof document === "undefined") return "";
-  const m = document.cookie.match(new RegExp(`(?:^|; )${COOKIE}=([^;]*)`));
-  return m ? decodeURIComponent(m[1]) : "";
+interface SyncResult {
+  timestamp: string;
+  inserted: number;
+  refreshed: number;
+  unmatched: number;
+  sources: { eventbrite: number; resident_advisor: number };
 }
 
-function writeCookie(value: string) {
-  document.cookie = `${COOKIE}=${encodeURIComponent(value)}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Strict`;
+// ── sessionStorage helpers ────────────────────────────────────────────────────
+// sessionStorage clears automatically when the browser tab is closed.
+
+const SS_KEY = "rsvpguide_admin";
+
+function ssGet(): string {
+  try { return sessionStorage.getItem(SS_KEY) ?? ""; } catch { return ""; }
+}
+function ssSet(v: string) {
+  try { sessionStorage.setItem(SS_KEY, v); } catch {}
+}
+function ssClear() {
+  try { sessionStorage.removeItem(SS_KEY); } catch {}
 }
 
-function clearCookie() {
-  document.cookie = `${COOKIE}=; path=/; max-age=0`;
-}
+// ── Shared input / label styles ───────────────────────────────────────────────
+
+const inputCls = "w-full rounded-lg border border-[#2A2A2A] bg-[#1C1C1C] px-4 py-2.5 text-sm text-[#F0EDE6] outline-none focus:border-[#C9A84C]/50";
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
-  const [key,          setKey]          = useState("");
   const [keyInput,     setKeyInput]     = useState("");
+  const [key,          setKey]          = useState("");
   const [authed,       setAuthed]       = useState(false);
   const [authError,    setAuthError]    = useState("");
   const [loading,      setLoading]      = useState(false);
   const [submissions,  setSubmissions]  = useState<Submission[]>([]);
   const [stats,        setStats]        = useState<Stats | null>(null);
-  const [patchStatus,  setPatchStatus]  = useState<Record<string, string>>({});
+  const [patchState,   setPatchState]   = useState<Record<string, "loading" | "error">>({});
+  const [syncing,      setSyncing]      = useState(false);
+  const [syncResult,   setSyncResult]   = useState<SyncResult | null>(null);
+  const [syncError,    setSyncError]    = useState<string | null>(null);
 
   // ── API helpers ─────────────────────────────────────────────────────────────
 
-  const adminFetch = useCallback(
+  const apiFetch = useCallback(
     (url: string, opts?: RequestInit) =>
-      fetch(url, { ...opts, headers: { "x-admin-key": key, "Content-Type": "application/json", ...opts?.headers } }),
+      fetch(url, {
+        ...opts,
+        headers: {
+          "x-admin-key": key,
+          "Content-Type": "application/json",
+          ...opts?.headers,
+        },
+      }),
     [key]
   );
 
@@ -61,8 +80,7 @@ export default function AdminPage() {
 
       if (subsRes.status === 401 || statsRes.status === 401) {
         setAuthError("Invalid admin key.");
-        setAuthed(false);
-        clearCookie();
+        ssClear();
         return;
       }
 
@@ -71,9 +89,9 @@ export default function AdminPage() {
 
       setSubmissions(subs ?? []);
       setStats(statsData);
-      setAuthed(true);
       setKey(adminKey);
-      writeCookie(adminKey);
+      ssSet(adminKey);
+      setAuthed(true);
     } catch {
       setAuthError("Network error. Please try again.");
     } finally {
@@ -81,31 +99,57 @@ export default function AdminPage() {
     }
   }, []);
 
-  // ── On mount: check cookie ───────────────────────────────────────────────────
+  // ── On mount: check sessionStorage ─────────────────────────────────────────
 
   useEffect(() => {
-    const stored = readCookie();
+    const stored = ssGet();
     if (stored) loadData(stored);
   }, [loadData]);
 
-  // ── Patch submission status ──────────────────────────────────────────────────
+  // ── Submission actions ──────────────────────────────────────────────────────
 
   const patch = async (id: string, status: "approved" | "rejected") => {
-    setPatchStatus((p) => ({ ...p, [id]: "loading" }));
+    setPatchState((p) => ({ ...p, [id]: "loading" }));
     try {
-      const res = await adminFetch("/api/admin/submissions", {
+      const res = await apiFetch("/api/admin/submissions", {
         method: "PATCH",
         body: JSON.stringify({ id, status }),
       });
       if (!res.ok) throw new Error();
       setSubmissions((prev) => prev.filter((s) => s.id !== id));
-      setPatchStatus((p) => ({ ...p, [id]: "done" }));
     } catch {
-      setPatchStatus((p) => ({ ...p, [id]: "error" }));
+      setPatchState((p) => ({ ...p, [id]: "error" }));
     }
   };
 
-  // ── Login form ───────────────────────────────────────────────────────────────
+  // ── Sync trigger ────────────────────────────────────────────────────────────
+
+  const triggerSync = async () => {
+    setSyncing(true);
+    setSyncError(null);
+    try {
+      const res = await apiFetch("/api/admin/sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Sync failed");
+      setSyncResult({ timestamp: new Date().toISOString(), ...data });
+    } catch (e) {
+      setSyncError(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const signOut = () => {
+    ssClear();
+    setAuthed(false);
+    setKey("");
+    setKeyInput("");
+    setSubmissions([]);
+    setStats(null);
+    setSyncResult(null);
+  };
+
+  // ── Login form ──────────────────────────────────────────────────────────────
 
   if (!authed) {
     return (
@@ -120,7 +164,7 @@ export default function AdminPage() {
               onChange={(e) => setKeyInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && keyInput && loadData(keyInput)}
               placeholder="Admin key"
-              className="w-full rounded-lg border border-[#2A2A2A] bg-[#1C1C1C] px-4 py-2.5 text-sm text-[#F0EDE6] outline-none focus:border-[#C9A84C]/50"
+              className={inputCls}
             />
             {authError && <p className="text-xs text-red-400">{authError}</p>}
             <button
@@ -137,103 +181,158 @@ export default function AdminPage() {
     );
   }
 
-  // ── Dashboard ────────────────────────────────────────────────────────────────
+  // ── Dashboard ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="font-playfair text-3xl font-bold text-[#F0EDE6]">Admin</h1>
-        <button
-          type="button"
-          onClick={() => { clearCookie(); setAuthed(false); setKey(""); }}
-          className="text-sm text-[#A89F8C] hover:text-[#F0EDE6]"
-        >
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 space-y-10">
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h1 className="font-playfair text-3xl font-bold text-[#F0EDE6]">Admin Dashboard</h1>
+        <button type="button" onClick={signOut}
+          className="text-sm text-[#A89F8C] transition-colors hover:text-[#F0EDE6]">
           Sign out
         </button>
       </div>
 
-      {/* Stats */}
+      {/* ── Section B: Stats ────────────────────────────────────────────────── */}
       {stats && (
-        <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { label: "Total venues",    value: stats.venues },
-            { label: "Active events",   value: stats.events },
-            { label: "Subscribers",     value: stats.subscribers },
-            { label: "Pending reviews", value: stats.pending },
-          ].map(({ label, value }) => (
-            <div key={label} className="rounded-lg border border-[#2A2A2A] bg-[#141414] p-4 text-center">
-              <p className="font-playfair text-2xl font-bold text-[#C9A84C]">{value}</p>
-              <p className="mt-0.5 text-xs text-[#A89F8C]">{label}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Submissions */}
-      <h2 className="mb-4 text-lg font-semibold text-[#F0EDE6]">
-        Pending submissions{submissions.length > 0 ? ` (${submissions.length})` : ""}
-      </h2>
-
-      {loading ? (
-        <p className="text-sm text-[#A89F8C]">Loading…</p>
-      ) : submissions.length === 0 ? (
-        <p className="rounded-lg border border-[#2A2A2A] bg-[#141414] p-6 text-center text-sm text-[#A89F8C]">
-          No pending submissions.
-        </p>
-      ) : (
-        <div className="space-y-3">
-          {submissions.map((s) => (
-            <div
-              key={s.id}
-              className="rounded-lg border border-[#2A2A2A] bg-[#141414] p-4"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-[#F0EDE6]">{s.venue_name}</p>
-                  <p className="text-sm text-[#A89F8C]">
-                    {s.contact_name} &middot; {s.contact_email}
-                  </p>
-                  {(s.venue_category || s.venue_neighbourhood) && (
-                    <p className="mt-1 text-xs text-[#A89F8C]">
-                      {[s.venue_category, s.venue_neighbourhood].filter(Boolean).join(" · ")}
-                    </p>
-                  )}
-                  {s.message && (
-                    <p className="mt-2 text-sm text-[#A89F8C] line-clamp-2">{s.message}</p>
-                  )}
-                  <p className="mt-1 text-[11px] text-[#A89F8C]/60">
-                    {new Date(s.created_at).toLocaleDateString("en-SG", {
-                      day: "numeric", month: "short", year: "numeric",
-                    })}
-                  </p>
-                </div>
-
-                <div className="flex gap-2 flex-shrink-0">
-                  <button
-                    type="button"
-                    disabled={patchStatus[s.id] === "loading"}
-                    onClick={() => patch(s.id, "approved")}
-                    className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    type="button"
-                    disabled={patchStatus[s.id] === "loading"}
-                    onClick={() => patch(s.id, "rejected")}
-                    className="rounded-lg border border-[#2A2A2A] bg-[#1C1C1C] px-3 py-1.5 text-xs font-semibold text-[#A89F8C] transition-colors hover:border-red-500/50 hover:text-red-400 disabled:opacity-50"
-                  >
-                    Reject
-                  </button>
-                </div>
+        <section>
+          <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-widest text-[#C9A84C]">
+            Overview
+          </h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { label: "Active venues",    value: stats.venues },
+              { label: "Upcoming events",  value: stats.events },
+              { label: "Subscribers",      value: stats.subscribers },
+              { label: "Pending reviews",  value: stats.pending },
+            ].map(({ label, value }) => (
+              <div key={label}
+                className="rounded-lg border border-[#2A2A2A] bg-[#141414] p-4 text-center">
+                <p className="font-playfair text-3xl font-bold text-[#C9A84C]">{value}</p>
+                <p className="mt-0.5 text-xs text-[#A89F8C]">{label}</p>
               </div>
-              {patchStatus[s.id] === "error" && (
-                <p className="mt-2 text-xs text-red-400">Update failed — try again.</p>
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </section>
       )}
+
+      {/* ── Section C: Quick actions ─────────────────────────────────────────── */}
+      <section>
+        <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-widest text-[#C9A84C]">
+          Quick actions
+        </h2>
+        <div className="rounded-xl border border-[#2A2A2A] bg-[#141414] p-5">
+          <div className="flex flex-wrap items-center gap-4">
+            <button
+              type="button"
+              disabled={syncing}
+              onClick={triggerSync}
+              className="rounded-lg bg-[#C9A84C] px-5 py-2 text-sm font-semibold text-[#0D0D0D] transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {syncing ? "Syncing…" : "Sync events from Eventbrite + RA"}
+            </button>
+
+            {syncResult && (
+              <p className="text-xs text-[#A89F8C]">
+                Last sync{" "}
+                <span className="text-[#F0EDE6]">
+                  {new Date(syncResult.timestamp).toLocaleString("en-SG")}
+                </span>{" "}
+                — {syncResult.inserted} new · {syncResult.refreshed} refreshed ·{" "}
+                {syncResult.unmatched} unmatched
+                {" "}({syncResult.sources.eventbrite} Eventbrite ·{" "}
+                {syncResult.sources.resident_advisor} RA)
+              </p>
+            )}
+          </div>
+
+          {syncError && (
+            <p className="mt-3 text-sm text-red-400">{syncError}</p>
+          )}
+        </div>
+      </section>
+
+      {/* ── Section A: Pending submissions ───────────────────────────────────── */}
+      <section>
+        <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-widest text-[#C9A84C]">
+          Pending submissions{submissions.length > 0 ? ` (${submissions.length})` : ""}
+        </h2>
+
+        {loading ? (
+          <p className="text-sm text-[#A89F8C]">Loading…</p>
+        ) : submissions.length === 0 ? (
+          <div className="rounded-xl border border-[#2A2A2A] bg-[#141414] p-8 text-center">
+            <p className="text-sm text-[#A89F8C]">No pending submissions.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-[#2A2A2A]">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead>
+                <tr className="border-b border-[#2A2A2A] bg-[#1C1C1C] text-left">
+                  {["Date", "Venue name", "Category", "Contact", "Email", "Message", "Actions"].map(
+                    (h) => (
+                      <th key={h}
+                        className="px-4 py-3 text-[11px] font-semibold uppercase tracking-widest text-[#A89F8C]">
+                        {h}
+                      </th>
+                    )
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#2A2A2A] bg-[#141414]">
+                {submissions.map((s) => (
+                  <tr key={s.id} className="transition-colors hover:bg-[#1C1C1C]">
+                    <td className="whitespace-nowrap px-4 py-3 text-[#A89F8C]">
+                      {new Date(s.created_at).toLocaleDateString("en-SG", {
+                        day: "numeric", month: "short",
+                      })}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-[#F0EDE6]">{s.venue_name}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-[#A89F8C]">
+                      {s.venue_category ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-[#A89F8C]">{s.contact_name}</td>
+                    <td className="px-4 py-3 text-[#A89F8C]">
+                      <a href={`mailto:${s.contact_email}`}
+                        className="hover:text-[#C9A84C] transition-colors">
+                        {s.contact_email}
+                      </a>
+                    </td>
+                    <td className="max-w-[220px] px-4 py-3 text-[#A89F8C]">
+                      <p className="line-clamp-2">{s.message ?? "—"}</p>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={patchState[s.id] === "loading"}
+                          onClick={() => patch(s.id, "approved")}
+                          className="rounded border border-emerald-600 px-3 py-1 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-600 hover:text-white disabled:opacity-50"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          disabled={patchState[s.id] === "loading"}
+                          onClick={() => patch(s.id, "rejected")}
+                          className="rounded border border-red-700 px-3 py-1 text-xs font-medium text-red-400 transition-colors hover:bg-red-700 hover:text-white disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                      {patchState[s.id] === "error" && (
+                        <p className="mt-1 text-[10px] text-red-400">Failed</p>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
