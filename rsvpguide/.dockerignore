@@ -1,0 +1,12 @@
+.git
+.github
+node_modules
+.next
+.env*.local
+*.log
+Dockerfile
+deploy.sh
+scripts/
+SETUP.md
+ENV_REFERENCE.md
+README.md

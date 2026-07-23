@@ -1,0 +1,98 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# RSVPguide — GitHub Actions auto-deploy to Hostinger VPS
+#
+# REQUIRED GITHUB SECRETS (Settings → Secrets and variables → Actions):
+#
+#   VPS_HOST          — your Hostinger VPS IP address or hostname
+#   VPS_USER          — SSH username (usually 'root' or your VPS user)
+#   VPS_SSH_KEY       — contents of your private SSH key (~/.ssh/id_rsa)
+#   VPS_APP_DIR       — absolute path on VPS where the app lives
+#                       e.g. /var/www/rsvpguide
+#
+# ENV VARS (add these too, or set them directly on the VPS):
+#   NEXT_PUBLIC_SUPABASE_URL
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY
+#   SUPABASE_SERVICE_ROLE_KEY
+#   GOOGLE_PLACES_API_KEY
+#   EVENTBRITE_API_KEY
+#   ADMIN_SECRET_KEY
+#   SYNC_SECRET_KEY
+#   SEED_SECRET_KEY
+#   NEXT_PUBLIC_SITE_URL
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Deploy to Hostinger VPS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Build & deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Node.js ────────────────────────────────────────────────────
+      - name: Set up Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      # ── 3. Install dependencies ──────────────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci
+
+      # ── 4. Build ─────────────────────────────────────────────────────────────
+      # Env vars required at build time (NEXT_PUBLIC_* are inlined by Next.js)
+      - name: Build Next.js app
+        env:
+          NEXT_PUBLIC_SUPABASE_URL:   ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SITE_URL:       ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+          NEXT_TELEMETRY_DISABLED:    "1"
+        run: npm run build
+
+      # ── 5. Deploy to VPS via SSH ─────────────────────────────────────────────
+      - name: Deploy to Hostinger VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:        ${{ secrets.VPS_HOST }}
+          username:    ${{ secrets.VPS_USER }}
+          key:         ${{ secrets.VPS_SSH_KEY }}
+          # Adjust APP_DIR to match your VPS directory
+          envs:        VPS_APP_DIR
+          script: |
+            set -e
+            echo "→ Navigating to app directory"
+            cd ${{ secrets.VPS_APP_DIR }}
+
+            echo "→ Pulling latest code"
+            git pull origin main
+
+            echo "→ Installing production dependencies"
+            npm ci --omit=dev
+
+            echo "→ Building app"
+            NEXT_TELEMETRY_DISABLED=1 npm run build
+
+            echo "→ Restarting Node process with PM2"
+            # If you don't use PM2, replace with your process manager command.
+            # To install PM2: npm install -g pm2
+            # First deploy: pm2 start node --name rsvpguide -- .next/standalone/server.js
+            pm2 restart rsvpguide || pm2 start node --name rsvpguide -- .next/standalone/server.js
+
+            echo "→ Deployment complete ✓"
+
+      # ── 6. Health check ──────────────────────────────────────────────────────
+      - name: Health check
+        run: |
+          sleep 5
+          curl -f ${{ secrets.NEXT_PUBLIC_SITE_URL }} || echo "⚠ Health check failed"
