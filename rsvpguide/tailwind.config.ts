@@ -20,8 +20,8 @@ const config: Config = {
         },
       },
       fontFamily: {
-        playfair: ["var(--font-playfair)", "Georgia", "serif"],
-        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+        playfair: ["var(--font-serif)", "Georgia", "serif"],
+        sans:     ["var(--font-sans)",  "system-ui", "sans-serif"],
       },
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
